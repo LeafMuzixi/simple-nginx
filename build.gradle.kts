@@ -25,6 +25,7 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation("io.vertx:vertx-web:${Version.vertx}")
     implementation("io.vertx:vertx-web-client:${Version.vertx}")
+    implementation("io.vertx:vertx-config:${Version.vertx}")
     implementation("io.vertx:vertx-lang-kotlin:${Version.vertx}")
     implementation("io.vertx:vertx-lang-kotlin-coroutines:${Version.vertx}")
     testImplementation(kotlin("test"))

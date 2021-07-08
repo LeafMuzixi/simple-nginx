@@ -11,8 +11,8 @@ class ProxyVerticle : CoroutineVerticle() {
     private val port = 9000
 
     private lateinit var upstreamArray: Array<Upstream>
+
     override suspend fun start() {
-        vertx.deployVerticle(ServerVerticle())
         try {
             upstreamArray = config.getJsonArray("upstream").map { Upstream.parse(vertx, it as JsonObject) }
                 .toTypedArray()
