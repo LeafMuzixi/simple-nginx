@@ -2,6 +2,7 @@ package com.mzx.nginx
 
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.handler.BodyHandler
+import io.vertx.ext.web.handler.StaticHandler
 import io.vertx.kotlin.coroutines.CoroutineVerticle
 import io.vertx.kotlin.coroutines.await
 
@@ -11,7 +12,24 @@ class ServerVerticle : CoroutineVerticle() {
     override suspend fun start() {
         try {
             val server = vertx.createHttpServer()
+
+            // webSocket 处理
+            server.webSocketHandler { webSocket ->
+                val id = webSocket.textHandlerID()
+                println("$id 已连接")
+                webSocket.handler { buffer ->
+                    // 仅将收到的消息包装并返回
+                    val message = "I received your message: $buffer"
+                    webSocket.writeTextMessage(message)
+                }.closeHandler {
+                    println("$id 已断开")
+                }
+            }
+
             val router = Router.router(vertx)
+
+            // 处理 webroot 内静态资源
+            router.route().handler(StaticHandler.create())
 
             router.get("/hello").handler { rc ->
                 val request = rc.request()

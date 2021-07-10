@@ -68,47 +68,70 @@ class ProxyVerticle : CoroutineVerticle() {
                 }
             }
 
-            server
-                .requestHandler { request ->
-                    resourceArray.find { request.uri().startsWith(it.prefix) }?.also {
-                        // 如果匹配到了静态资源路径, 由静态资源路由处理
-                        resourceRouter.handle(request)
-                    } ?: upstreamArray.find { request.uri().startsWith(it.prefix) }?.also { upstream ->
-                        // 如果找到了可以请求到的代理地址, 请求
+            // 处理 WebSocket 请求
+            server.webSocketHandler { webSocket ->
+                // 如果找到了可以请求到的代理地址, 建立连接, 否则, 拒绝
+                upstreamArray.find { webSocket.uri().startsWith(it.prefix) }?.also { upstream ->
+                    // 尝试向服务端建立 WebSocket
+                    upstream.client.webSocket(webSocket.uri()).onSuccess { upstreamWebSocket ->
+                        // 建立成功
 
-                        // 暂停数据处理
-                        request.pause()
+                        // 转发数据
+                        webSocket.frameHandler(upstreamWebSocket::writeFrame)
+                        upstreamWebSocket.frameHandler(webSocket::writeFrame)
 
-                        // 启动协程, 处理后续操作
-                        launch {
-                            try {
-                                val uri = request.uri().replace(upstream.prefix, "/")
-                                val upstreamRequest = upstream.client.request(request.method(), uri).await()
+                        // 一端关闭同时关闭另一端
+                        webSocket.closeHandler { upstreamWebSocket.close() }
+                        upstreamWebSocket.closeHandler { webSocket.close() }
 
-                                upstreamRequest.headers().setAll(request.headers())
-                                val upstreamResponse = upstreamRequest.send(request).await()
+                    }.onFailure {
+                        // 在执行异步操作后, webSocket 就已经接收建立了, 此时只能关闭
+                        webSocket.close()
+                    }
+                } ?: webSocket.reject()
+            }
 
-                                val response = request.response()
-                                response.headers().setAll(upstreamResponse.headers())
-                                response.send(upstreamResponse)
+            // 处理 Http 请求
+            server.requestHandler { request ->
+                resourceArray.find { request.uri().startsWith(it.prefix) }?.also {
+                    // 如果匹配到了静态资源路径, 由静态资源路由处理
+                    resourceRouter.handle(request)
+                } ?: upstreamArray.find { request.uri().startsWith(it.prefix) }?.also { upstream ->
+                    // 如果找到了可以请求到的代理地址, 请求
 
-                                upstreamResponse.exceptionHandler { t ->
-                                    t.printStackTrace()
-                                    response.statusCode = 500
-                                    response.end(t.message)
-                                }
-                            } catch (t: Throwable) {
-                                request.response().run {
-                                    statusCode = 500
-                                    end("请求失败: ${t.message}")
-                                }
+                    // 异步处理前, 暂停请求处理
+                    request.pause()
+
+                    // 启动协程, 处理后续操作
+                    launch {
+                        try {
+                            val uri = request.uri().replace(upstream.prefix, "/")
+                            val upstreamRequest = upstream.client.request(request.method(), uri).await()
+
+                            upstreamRequest.headers().setAll(request.headers())
+                            val upstreamResponse = upstreamRequest.send(request).await()
+
+                            val response = request.response()
+                            response.headers().setAll(upstreamResponse.headers())
+                            response.send(upstreamResponse)
+
+                            upstreamResponse.exceptionHandler { t ->
+                                t.printStackTrace()
+                                response.statusCode = 500
+                                response.end(t.message)
+                            }
+                        } catch (t: Throwable) {
+                            request.response().run {
+                                statusCode = 500
+                                end("请求失败: ${t.message}")
                             }
                         }
-                    } ?: request.response().run {
-                        statusCode = 404
-                        end("没有找到可以请求的代理地址")
                     }
+                } ?: request.response().run {
+                    statusCode = 404
+                    end("没有找到可以请求的代理地址")
                 }
+            }
 
             server.listen(port).await()
             println("Proxy server started success on port $port")

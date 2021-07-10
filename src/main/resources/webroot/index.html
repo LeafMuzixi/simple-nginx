@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>WebSocket test</title>
+</head>
+<body>
+<form onsubmit="return false;">
+    <label>
+        消息:
+        <input type="text" name="message">
+    </label>
+    <input type="button" value="提交" onclick="send(this.form.message.value)">
+    <div id="content"></div>
+</form>
+</body>
+<script>
+    let socket;
+    const contentBox = document.getElementById("content");
+
+    if (window.WebSocket) {
+        socket = new WebSocket("ws://localhost:9000/a");
+        // websocket收到消息
+        socket.onmessage = function (event) {
+            // 如果服务端是写的二进制数据，则此处的 event.data 也是一个二进制对象
+            contentBox.innerHTML += `<br>${event.data}`;
+        };
+
+        // websocket连接打开
+        socket.onopen = function (event) {
+            console.log("websocket 连接打开");
+        };
+
+        // websocket连接关闭
+        socket.onclose = function (event) {
+            console.log("websocket 连接关闭");
+        };
+    } else {
+        alert("你的浏览器不支持websocket");
+    }
+
+    function send(message) {
+        if (!window.WebSocket) {
+            return;
+        }
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(message);
+        } else {
+            alert("websocket连接未打开，请检查网络设置");
+        }
+    }
+</script>
+</html>
