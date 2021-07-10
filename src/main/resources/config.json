@@ -1,5 +1,17 @@
 {
   "port": 9000,
+  "resource": [
+    {
+      "prefix": "/static1",
+      "dir": "static1",
+      "reroute404": "/static1"
+    },
+    {
+      "prefix": "/static2",
+      "dir": "static2",
+      "reroute404": "/static2/404.html"
+    }
+  ],
   "upstream": [
     {
       "prefix": "/a",

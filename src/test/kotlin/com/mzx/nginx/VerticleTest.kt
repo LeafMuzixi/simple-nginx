@@ -11,37 +11,40 @@ import io.vertx.junit5.VertxExtension
 import io.vertx.junit5.VertxTestContext
 import io.vertx.kotlin.core.json.jsonObjectOf
 import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 
 @ExtendWith(VertxExtension::class)
 class VerticleTest {
-    @BeforeEach
-    fun beforeAll(vertx: Vertx, testContext: VertxTestContext) {
-        // 需要部署服务及代理, 共两个检查点
-        // 当检查点都被标记后, 测试应该通过
-        // 需要注意: 在执行 completeNow 之类的方法后, 测试依旧会通过
-        // 若测试点存在为标记, 测试则会等待超时
-        val deployCheckpoint = testContext.checkpoint(2)
+    companion object {
+        @BeforeAll
+        @JvmStatic
+        fun beforeAll(vertx: Vertx, testContext: VertxTestContext) {
+            // 需要部署服务及代理, 共两个检查点
+            // 当检查点都被标记后, 测试应该通过
+            // 需要注意: 在执行 completeNow 之类的方法后, 测试依旧会通过
+            // 若测试点存在为标记, 测试则会等待超时
+            val deployCheckpoint = testContext.checkpoint(2)
 
-        // 配置文件读取
-        val configStoreOptions = ConfigStoreOptions().apply {
-            type = "file"
-            config = jsonObjectOf("path" to "E:\\IdeaProjects\\simple-nginx\\src\\main\\resources\\config.json")
+            // 配置文件读取
+            val configStoreOptions = ConfigStoreOptions().apply {
+                type = "file"
+                config = jsonObjectOf("path" to "config.json")
+            }
+            val configRetrieverOptions = ConfigRetrieverOptions().addStore(configStoreOptions)
+
+            // 期望结果成功
+            ConfigRetriever.create(vertx, configRetrieverOptions).getConfig(testContext.succeeding { jsonObject ->
+                // 在结果成功的基础上, 标记检查点
+                vertx.deployVerticle(ServerVerticle(), testContext.succeeding { deployCheckpoint.flag() })
+                vertx.deployVerticle(
+                    ProxyVerticle(),
+                    DeploymentOptions().setConfig(jsonObject),
+                    testContext.succeeding { deployCheckpoint.flag() }
+                )
+            })
         }
-        val configRetrieverOptions = ConfigRetrieverOptions().addStore(configStoreOptions)
-
-        // 期望结果成功
-        ConfigRetriever.create(vertx, configRetrieverOptions).getConfig(testContext.succeeding { jsonObject ->
-            // 在结果成功的基础上, 标记检查点
-            vertx.deployVerticle(ServerVerticle(), testContext.succeeding { deployCheckpoint.flag() })
-            vertx.deployVerticle(
-                ProxyVerticle(),
-                DeploymentOptions().setConfig(jsonObject),
-                testContext.succeeding { deployCheckpoint.flag() }
-            )
-        })
     }
 
     @Test
@@ -102,6 +105,58 @@ class VerticleTest {
                 // 不进行 body 转换, 校验状态码
                 testContext.verify {
                     assertEquals(response.statusCode(), 500)
+                    requestCheckpoint.flag()
+                }
+            })
+    }
+
+    @Test
+    fun testResourceProxy(vertx: Vertx, testContext: VertxTestContext) {
+        val client = vertx.createHttpClient()
+
+        val requestCheckpoint = testContext.checkpoint(5)
+
+        client.request(HttpMethod.GET, 9000, "127.0.0.1", "/static1/index.html")
+            .compose { req -> req.send() }
+            .onComplete(testContext.succeeding { response ->
+                testContext.verify {
+                    assertEquals(response.statusCode(), 200)
+                    requestCheckpoint.flag()
+                }
+            })
+
+        client.request(HttpMethod.GET, 9000, "127.0.0.1", "/static2/index.html")
+            .compose { req -> req.send() }
+            .onComplete(testContext.succeeding { response ->
+                testContext.verify {
+                    assertEquals(response.statusCode(), 200)
+                    requestCheckpoint.flag()
+                }
+            })
+
+        client.request(HttpMethod.GET, 9000, "127.0.0.1", "/static1/hint.txt")
+            .compose { req -> req.send() }
+            .onComplete(testContext.succeeding { response ->
+                testContext.verify {
+                    assertEquals(response.statusCode(), 200)
+                    requestCheckpoint.flag()
+                }
+            })
+
+        client.request(HttpMethod.GET, 9000, "127.0.0.1", "/static1/notfound.html")
+            .compose { req -> req.send() }
+            .onComplete(testContext.succeeding { response ->
+                testContext.verify {
+                    assertEquals(response.statusCode(), 301)
+                    requestCheckpoint.flag()
+                }
+            })
+
+        client.request(HttpMethod.GET, 9000, "127.0.0.1", "/static2/notfound.html")
+            .compose { req -> req.send() }
+            .onComplete(testContext.succeeding { response ->
+                testContext.verify {
+                    assertEquals(response.statusCode(), 404)
                     requestCheckpoint.flag()
                 }
             })
