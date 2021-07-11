@@ -5,6 +5,7 @@ import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
 import io.vertx.core.DeploymentOptions
 import io.vertx.core.Vertx
+import io.vertx.core.buffer.Buffer
 import io.vertx.core.http.HttpClientResponse
 import io.vertx.core.http.HttpMethod
 import io.vertx.junit5.VertxExtension
@@ -160,5 +161,28 @@ class VerticleTest {
                     requestCheckpoint.flag()
                 }
             })
+    }
+
+    @Test
+    fun testWebSocketProxy(vertx: Vertx, testContext: VertxTestContext) {
+        val client = vertx.createHttpClient()
+        // 5 个消息 + 1 个连接断开
+        val requestCheckpoint = testContext.checkpoint(6)
+
+        client.webSocket(9000, "127.0.0.1", "/a", testContext.succeeding { webSocket ->
+            webSocket.handler { buffer ->
+                testContext.verify {
+                    assertTrue(buffer.toString().endsWith("message"))
+                    requestCheckpoint.flag()
+                }
+            }
+            webSocket.endHandler { requestCheckpoint.flag() }
+            // 发送五个消息
+            for (i in 0..5) {
+                webSocket.write(Buffer.buffer("is $i message"))
+            }
+        })
+        // 这里并没有主动关闭 webSocket, 但是依旧得到了连接断开
+        // 推测: 在执行完当前方法后, webSocket 自动断开
     }
 }

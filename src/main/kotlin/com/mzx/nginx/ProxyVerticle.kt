@@ -73,18 +73,19 @@ class ProxyVerticle : CoroutineVerticle() {
                 // 如果找到了可以请求到的代理地址, 建立连接, 否则, 拒绝
                 upstreamArray.find { webSocket.uri().startsWith(it.prefix) }?.also { upstream ->
                     // 尝试向服务端建立 WebSocket
-                    upstream.client.webSocket(webSocket.uri()).onSuccess { upstreamWebSocket ->
-                        // 建立成功
+                    upstream.client.webSocket(webSocket.uri().substring(upstream.prefix.length))
+                        .onSuccess { upstreamWebSocket ->
+                            // 建立成功
 
-                        // 转发数据
-                        webSocket.frameHandler(upstreamWebSocket::writeFrame)
-                        upstreamWebSocket.frameHandler(webSocket::writeFrame)
+                            // 转发数据
+                            webSocket.pipeTo(upstreamWebSocket)
+                            upstreamWebSocket.pipeTo(webSocket)
 
-                        // 一端关闭同时关闭另一端
-                        webSocket.closeHandler { upstreamWebSocket.close() }
-                        upstreamWebSocket.closeHandler { webSocket.close() }
+                            // 一端关闭同时关闭另一端
+                            webSocket.closeHandler { upstreamWebSocket.close() }
+                            upstreamWebSocket.closeHandler { webSocket.close() }
 
-                    }.onFailure {
+                        }.onFailure {
                         // 在执行异步操作后, webSocket 就已经接收建立了, 此时只能关闭
                         webSocket.close()
                     }
