@@ -26,7 +26,7 @@
 ```
 这个依赖会向后台发送请求获取 `eventBus` 信息: 
 
-![image-20210710204853478](README.assets\image-20210710204853478.png)
+![image-20210710204853478](README.assets/image-20210710204853478.png)
 
 ![image-20210710205029268](README.assets/image-20210710205029268.png)
 

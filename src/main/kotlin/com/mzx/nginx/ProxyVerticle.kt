@@ -93,10 +93,11 @@ class ProxyVerticle : CoroutineVerticle() {
 
             // 处理 Http 请求
             server.requestHandler { request ->
-                resourceArray.find { request.uri().startsWith(it.prefix) }?.also {
+                val uri = request.uri()
+                resourceArray.find { uri.startsWith(it.prefix) }?.also {
                     // 如果匹配到了静态资源路径, 由静态资源路由处理
                     resourceRouter.handle(request)
-                } ?: upstreamArray.find { request.uri().startsWith(it.prefix) }?.also { upstream ->
+                } ?: upstreamArray.find { uri.startsWith(it.prefix) }?.also { upstream ->
                     // 如果找到了可以请求到的代理地址, 请求
 
                     // 异步处理前, 暂停请求处理
@@ -105,13 +106,17 @@ class ProxyVerticle : CoroutineVerticle() {
                     // 启动协程, 处理后续操作
                     launch {
                         try {
-                            val uri = request.uri().replace(upstream.prefix, "/")
-                            val upstreamRequest = upstream.client.request(request.method(), uri).await()
+                            val upstreamRequest =
+                                upstream.client.request(request.method(), uri.substring(upstream.prefix.length)).await()
 
                             upstreamRequest.headers().setAll(request.headers())
                             val upstreamResponse = upstreamRequest.send(request).await()
 
                             val response = request.response()
+                            // 需要同步状态码, 因为响应不止 200
+                            // 该代理是可能代理资源请求的, 而在资源请求过程内, 可能存在 304 响应
+                            // 也可能存在其它情况, 为了维持代理的功能, 此处状态码应与上游响应保持一致
+                            response.statusCode = upstreamResponse.statusCode()
                             response.headers().setAll(upstreamResponse.headers())
                             response.send(upstreamResponse)
 
