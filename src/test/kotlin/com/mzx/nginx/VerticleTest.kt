@@ -11,6 +11,8 @@ import io.vertx.core.http.HttpMethod
 import io.vertx.junit5.VertxExtension
 import io.vertx.junit5.VertxTestContext
 import io.vertx.kotlin.core.json.jsonObjectOf
+import io.vertx.kotlin.coroutines.await
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -211,5 +213,48 @@ class VerticleTest {
         })
         // 这里并没有主动关闭 webSocket, 但是依旧得到了连接断开
         // 推测: 在执行完当前方法后, webSocket 自动断开
+    }
+
+    @Test
+    fun testLoadBalancing(vertx: Vertx, testContext: VertxTestContext) {
+        runBlocking {
+            val portMap = mutableMapOf(8001 to 0, 8002 to 0, 8003 to 0)
+
+            portMap.forEach {
+                val server = vertx.createHttpServer()
+                server.requestHandler { request -> request.response().end(it.key.toString()) }
+                server.listen(it.key).await()
+            }
+
+            val client = vertx.createHttpClient()
+
+            // 100 次请求 + 权重判断
+            val requestCheckpoint = testContext.checkpoint(101)
+
+            for (i in 0..100) {
+                client.request(HttpMethod.GET, 9000, "127.0.0.1", "/c")
+                    .compose { req -> req.send().compose(HttpClientResponse::body) }
+                    .onComplete(testContext.succeeding {
+                        testContext.verify {
+                            val port = it.toString().toInt()
+                            assertContains(portMap, port)
+                            portMap[port] = portMap[port]!! + 1
+                            requestCheckpoint.flag()
+
+                            // 校验权重轮询
+                            if (i == 100 - 1) {
+                                val maxRequestCount = portMap.maxOf { it.value }
+                                portMap.forEach { (t, u) ->
+                                    println("$t to $u")
+                                    if (u == maxRequestCount) {
+                                        assertEquals(t, 8001)
+                                        requestCheckpoint.flag()
+                                    }
+                                }
+                            }
+                        }
+                    })
+            }
+        }
     }
 }

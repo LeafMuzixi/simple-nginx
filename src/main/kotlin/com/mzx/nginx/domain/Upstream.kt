@@ -6,13 +6,13 @@ import io.vertx.core.http.HttpClient
 import io.vertx.core.http.HttpClientOptions
 import java.net.URL
 
-class Upstream(private val vertx: Vertx, val prefix: String, val url: String) {
+class Upstream(private val vertx: Vertx, val url: String, var weight: Int) {
     companion object {
         fun parse(vertx: Vertx, json: JsonObject): Upstream {
             return Upstream(
                 vertx,
-                prefix = json.getString("prefix"),
                 url = json.getString("url"),
+                weight = json.getInteger("weight", 1)
             )
         }
     }

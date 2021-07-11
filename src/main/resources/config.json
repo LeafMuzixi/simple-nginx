@@ -15,14 +15,43 @@
       "cachingEnabled": false
     }
   ],
-  "upstream": [
+  "server": [
     {
       "prefix": "/a",
-      "url": "http://127.0.0.1:8080"
+      "upstream": [
+        {
+          "url": "http://127.0.0.1:8080",
+          "weight": 1
+        },
+        {
+          "url": "http://127.0.0.1:8080",
+          "weight": 1
+        }
+      ]
     },
     {
       "prefix": "/b",
-      "url": "http://127.0.0.1:8888"
+      "upstream": [
+        {
+          "url": "http://127.0.0.1:8888",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "prefix": "/c",
+      "upstream": [
+        {
+          "url": "http://127.0.0.1:8001",
+          "weight": 3
+        },
+        {
+          "url": "http://127.0.0.1:8002"
+        },
+        {
+          "url": "http://127.0.0.1:8003"
+        }
+      ]
     }
   ]
 }
