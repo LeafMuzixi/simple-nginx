@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import kotlin.test.assertContains
 
 @ExtendWith(VertxExtension::class)
 class VerticleTest {
@@ -158,6 +159,32 @@ class VerticleTest {
             .onComplete(testContext.succeeding { response ->
                 testContext.verify {
                     assertEquals(response.statusCode(), 404)
+                    requestCheckpoint.flag()
+                }
+            })
+    }
+
+    @Test
+    fun testResourceCache(vertx: Vertx, testContext: VertxTestContext) {
+        val client = vertx.createHttpClient()
+
+        val requestCheckpoint = testContext.checkpoint(2)
+
+        client.request(HttpMethod.GET, 9000, "127.0.0.1", "/static1/index.html")
+            .compose { req -> req.send() }
+            .onComplete(testContext.succeeding { response ->
+                testContext.verify {
+                    assertContains(response.headers().get("cache-control"), "max-age=30")
+                    requestCheckpoint.flag()
+                }
+            })
+
+        client.request(HttpMethod.GET, 9000, "127.0.0.1", "/static2/index.html")
+            .compose { req -> req.send() }
+            .onComplete(testContext.succeeding { response ->
+                testContext.verify {
+                    assertContains(response.headers().get("cache-control"), "no-store")
+                    assertContains(response.headers().get("cache-control"), "no-store")
                     requestCheckpoint.flag()
                 }
             })

@@ -4,12 +4,15 @@
     {
       "prefix": "/static1",
       "dir": "static1",
-      "reroute404": "/static1"
+      "reroute404": "/static1",
+      "cachingEnabled": true,
+      "maxAgeSeconds": 30
     },
     {
       "prefix": "/static2",
       "dir": "static2",
-      "reroute404": "/static2/404.html"
+      "reroute404": "/static2/404.html",
+      "cachingEnabled": false
     }
   ],
   "upstream": [

@@ -49,9 +49,22 @@ class ProxyVerticle : CoroutineVerticle() {
                 // 路径在匹配时, 必须为 ".../*" 的格式
                 // 这里在配置路由时, 对路径进行处理, 保证为 "/../*" 的格式
                 resourceRouter.route("${it.prefix.trimEnd('/', '*')}/*")
+                    .handler { rc ->
+                        if (it.cachingEnabled == false) {
+                            rc.response().headers()
+                                .add("Cache-Control", "no-store")
+                                .add("Cache-Control", "no-cache")
+                        }
+                        rc.next()
+                    }
                     .handler(
                         StaticHandler.create().setAllowRootFileSystemAccess(true)
-                            .setWebRoot(it.dir)
+                            .setWebRoot(it.dir).apply {
+                                if (it.cachingEnabled == true) {
+                                    setCachingEnabled(it.cachingEnabled)
+                                    setMaxAgeSeconds(it.maxAgeSeconds)
+                                }
+                            }
                     )
             }
 
@@ -86,9 +99,9 @@ class ProxyVerticle : CoroutineVerticle() {
                             upstreamWebSocket.closeHandler { webSocket.close() }
 
                         }.onFailure {
-                        // 在执行异步操作后, webSocket 就已经接收建立了, 此时只能关闭
-                        webSocket.close()
-                    }
+                            // 在执行异步操作后, webSocket 就已经接收建立了, 此时只能关闭
+                            webSocket.close()
+                        }
                 } ?: webSocket.reject()
             }
 
