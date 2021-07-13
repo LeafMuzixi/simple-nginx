@@ -91,6 +91,7 @@ class ProxyVerticle : CoroutineVerticle() {
                             // 建立成功
 
                             // 转发数据
+                            // 当 webSocket 作为 ReadStream 或 WriteStream 时, 只能传递二进制帧且不回进行分割
                             webSocket.pipeTo(upstreamWebSocket)
                             upstreamWebSocket.pipeTo(webSocket)
 

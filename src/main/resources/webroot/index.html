@@ -19,11 +19,13 @@
     const contentBox = document.getElementById("content");
 
     if (window.WebSocket) {
-        socket = new WebSocket("ws://localhost:9000/a");
+        socket = new WebSocket("ws://127.0.0.1:9000/a/websocket");
         // websocket收到消息
         socket.onmessage = function (event) {
             // 如果服务端是写的二进制数据，则此处的 event.data 也是一个二进制对象
-            contentBox.innerHTML += `<br>${event.data}`;
+            // Blob.text() 返回一个 Promise 对象，包含 blob 中的内容，使用 UTF-8 格式编码
+            // 详见 https://developer.mozilla.org/zh-CN/docs/Web/API/Blob/text
+            event.data.text().then(value => contentBox.innerHTML += `<br>${value}`);
         };
 
         // websocket连接打开
