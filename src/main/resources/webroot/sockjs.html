@@ -16,39 +16,40 @@
 </body>
 <script src="https://unpkg.io/sockjs-client@1.5.0/dist/sockjs.min.js"></script>
 <script>
-    const contentBox = document.getElementById("content");
-    const sock = new SockJS('http://127.0.0.1:9000/a/sock');
+    const contentBox = document.getElementById("content")
+    const sock = new SockJS('http://127.0.0.1:9000/a/sock')
+    // const sock = new SockJS('http://127.0.0.1:8080/sock')
 
     sock.onopen = function () {
-        console.log('open');
-    };
+        console.log('open')
+    }
 
     sock.onmessage = function (e) {
         // 如果服务端是写的二进制数据，则此处的 event.data 也是一个二进制对象
-        contentBox.innerHTML += `<br>${e.data}`;
-    };
+        contentBox.innerHTML += `<br>${e.data}`
+    }
 
     sock.onevent = function (event, message) {
-        console.log('event: %o, message:%o', event, message);
-        return true; // in order to signal that the message has been processed
-    };
+        console.log('event: %o, message:%o', event, message)
+        return true // in order to signal that the message has been processed
+    }
 
     sock.onunhandled = function (json) {
-        console.log('this message has no address:', json);
-    };
+        console.log('this message has no address:', json)
+    }
 
     sock.onclose = function () {
-        console.log('close');
-    };
+        console.log('close')
+    }
 
     function send(message) {
         if (!window.WebSocket) {
-            return;
+            return
         }
         if (sock.readyState === SockJS.OPEN) {
-            sock.send(message);
+            sock.send(message)
         } else {
-            alert("sock 连接未打开，请检查网络设置");
+            alert("sock 连接未打开，请检查网络设置")
         }
     }
 </script>

@@ -198,7 +198,7 @@ class VerticleTest {
         // 5 个消息 + 1 个连接断开
         val requestCheckpoint = testContext.checkpoint(6)
 
-        client.webSocket(9000, "127.0.0.1", "/a", testContext.succeeding { webSocket ->
+        client.webSocket(9000, "127.0.0.1", "/a/websocket", testContext.succeeding { webSocket ->
             webSocket.handler { buffer ->
                 testContext.verify {
                     assertTrue(buffer.toString().endsWith("message"))

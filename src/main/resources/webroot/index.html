@@ -15,40 +15,41 @@
 </form>
 </body>
 <script>
-    let socket;
-    const contentBox = document.getElementById("content");
+    let socket
+    const contentBox = document.getElementById("content")
 
     if (window.WebSocket) {
-        socket = new WebSocket("ws://127.0.0.1:9000/a/websocket");
+        socket = new WebSocket("ws://127.0.0.1:9000/a/websocket")
+        // socket = new WebSocket("ws://127.0.0.1:8080/websocket");
         // websocket收到消息
         socket.onmessage = function (event) {
             // 如果服务端是写的二进制数据，则此处的 event.data 也是一个二进制对象
             // Blob.text() 返回一个 Promise 对象，包含 blob 中的内容，使用 UTF-8 格式编码
             // 详见 https://developer.mozilla.org/zh-CN/docs/Web/API/Blob/text
-            event.data.text().then(value => contentBox.innerHTML += `<br>${value}`);
-        };
+            event.data.text().then(value => contentBox.innerHTML += `<br>${value}`)
+        }
 
         // websocket连接打开
         socket.onopen = function (event) {
-            console.log("websocket 连接打开");
-        };
+            console.log("websocket 连接打开")
+        }
 
         // websocket连接关闭
         socket.onclose = function (event) {
-            console.log("websocket 连接关闭");
-        };
+            console.log("websocket 连接关闭")
+        }
     } else {
-        alert("你的浏览器不支持websocket");
+        alert("你的浏览器不支持websocket")
     }
 
     function send(message) {
         if (!window.WebSocket) {
-            return;
+            return
         }
         if (socket.readyState === WebSocket.OPEN) {
-            socket.send(message);
+            socket.send(message)
         } else {
-            alert("websocket连接未打开，请检查网络设置");
+            alert("websocket连接未打开，请检查网络设置")
         }
     }
 </script>

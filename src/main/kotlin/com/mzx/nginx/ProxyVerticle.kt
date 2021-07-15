@@ -3,6 +3,7 @@ package com.mzx.nginx
 import com.mzx.nginx.domain.Resource
 import com.mzx.nginx.domain.Server
 import io.vertx.core.http.HttpServerOptions
+import io.vertx.core.http.WebSocketConnectOptions
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.handler.StaticHandler
@@ -81,31 +82,6 @@ class ProxyVerticle : CoroutineVerticle() {
                 }
             }
 
-            // 处理 WebSocket 请求
-            server.webSocketHandler { webSocket ->
-                // 如果找到了可以请求到的代理地址, 建立连接, 否则, 拒绝
-                serverArray.find { webSocket.uri().startsWith(it.prefix) }?.also { server ->
-                    // 尝试向服务端建立 WebSocket
-                    server.getClient().webSocket(webSocket.uri().substring(server.prefix.length))
-                        .onSuccess { upstreamWebSocket ->
-                            // 建立成功
-
-                            // 转发数据
-                            // 当 webSocket 作为 ReadStream 或 WriteStream 时, 只能传递二进制帧且不回进行分割
-                            webSocket.pipeTo(upstreamWebSocket)
-                            upstreamWebSocket.pipeTo(webSocket)
-
-                            // 一端关闭同时关闭另一端
-                            webSocket.closeHandler { upstreamWebSocket.close() }
-                            upstreamWebSocket.closeHandler { webSocket.close() }
-
-                        }.onFailure {
-                            // 在执行异步操作后, webSocket 就已经接收建立了, 此时只能关闭
-                            webSocket.close()
-                        }
-                } ?: webSocket.reject()
-            }
-
             // 处理 Http 请求
             server.requestHandler { request ->
                 val uri = request.uri()
@@ -121,25 +97,53 @@ class ProxyVerticle : CoroutineVerticle() {
                     // 启动协程, 处理后续操作
                     launch {
                         try {
-                            val upstreamRequest =
-                                server.getClient().request(request.method(), uri.substring(server.prefix.length))
-                                    .await()
+                            // 如果是请求将协议升级为 websocket
+                            if (request.headers().contains("Upgrade") && request.getHeader("Upgrade") == "websocket") {
+                                val webSocketConnectOptions = WebSocketConnectOptions().apply {
+                                    // 在测试中, 发现使用 vertx HttpClient 作为 webSocket 客户端, 不能支持 permessage-deflate 压缩
+                                    // 这里放弃转发所有的请求头, 因为必要的请求头 webSocket 客户端会自动填写
+//                                    headers = request.headers()
+                                    this.uri = uri.substring(server.prefix.length)
+                                }
+                                // 建立代理
+                                val serverWebSocket = server.getClient().webSocket(webSocketConnectOptions).await()
+                                val webSocket = request.toWebSocket().await()
 
-                            upstreamRequest.headers().setAll(request.headers())
-                            val upstreamResponse = upstreamRequest.send(request).await()
+                                // 建立成功
 
-                            val response = request.response()
-                            // 需要同步状态码, 因为响应不止 200
-                            // 该代理是可能代理资源请求的, 而在资源请求过程内, 可能存在 304 响应
-                            // 也可能存在其它情况, 为了维持代理的功能, 此处状态码应与上游响应保持一致
-                            response.statusCode = upstreamResponse.statusCode()
-                            response.headers().setAll(upstreamResponse.headers())
-                            response.send(upstreamResponse)
+                                // 转发数据
 
-                            upstreamResponse.exceptionHandler { t ->
-                                t.printStackTrace()
-                                response.statusCode = 500
-                                response.end(t.message)
+                                // 当把 webSocket 当作 ReadStream 或 WriteStream 使用时
+                                // 只能用于WebSocket连接, 这些连接使用的是二进制帧, 没有分裂到多个帧
+                                // 而 webSocket 报文是分帧传输的, 不能主动将帧进行合并, 因为有时候它们可能代表着特殊的意义
+                                // 所以, 这里使用 帧处理来转发, 而非 管道(pipe)
+                                webSocket.frameHandler(serverWebSocket::writeFrame)
+                                serverWebSocket.frameHandler(webSocket::writeFrame)
+
+                                // 一端关闭同时关闭另一端
+                                webSocket.closeHandler { serverWebSocket.close() }
+                                serverWebSocket.closeHandler { webSocket.close() }
+                            } else {
+                                val serverRequest =
+                                    server.getClient().request(request.method(), uri.substring(server.prefix.length))
+                                        .await()
+
+                                serverRequest.headers().setAll(request.headers())
+                                val serverResponse = serverRequest.send(request).await()
+
+                                val response = request.response()
+                                // 需要同步状态码, 因为响应不止 200
+                                // 该代理是可能代理资源请求的, 而在资源请求过程内, 可能存在 304 响应
+                                // 也可能存在其它情况, 为了维持代理的功能, 此处状态码应与上游响应保持一致
+                                response.statusCode = serverResponse.statusCode()
+                                response.headers().setAll(serverResponse.headers())
+                                response.send(serverResponse)
+
+                                serverResponse.exceptionHandler { t ->
+                                    t.printStackTrace()
+                                    response.statusCode = 500
+                                    response.end(t.message)
+                                }
                             }
                         } catch (t: Throwable) {
                             request.response().run {
